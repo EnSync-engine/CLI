@@ -14,13 +14,13 @@ This guide outlines how to install and configure the CLI tool for multiple platf
 
    - **macOS (Darwin)**:
      ```bash
-     curl -LO https://github.com/EnSync-engine/CLI/releases/download/CLI_1.0.0_darwin_amd64.tar.gz
+     curl -L -o CLI_1.0.0_darwin_amd64.tar.gz https://github.com/EnSync-engine/CLI/releases/download/v1.0.0/CLI_1.0.0_darwin_amd64.tar.gz
 
      ```
 
    - **Linux**:
      ```bash
-     curl -LO https://github.com/EnSync-engine/CLI/releases/download/CLI_1.0.0_linux_amd64.tar.gz
+     curl -L -o CLI_1.0.0_linux_amd64.tar.gz https://github.com/EnSync-engine/CLI/releases/download/v1.0.0/CLI_1.0.0_linux_amd64.tar.gz
      ```
 
    - **Windows**:

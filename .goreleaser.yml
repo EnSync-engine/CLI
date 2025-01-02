@@ -1,0 +1,52 @@
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: ensync-cli
+    binary: ensync-cli
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/rossi1/ensync-cli/pkg/version.Version={{.Version}}
+
+archives:
+  - id: linux_and_darwin
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+    builds:
+      - ensync-cli
+
+  - id: windows
+    format: zip
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+    builds:
+      - ensync-cli
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - Merge pull request
+      - Merge branch

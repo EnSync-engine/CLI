@@ -46,20 +46,20 @@ This guide outlines how to install and configure the CLI tool for multiple platf
 
    After extracting, make the binary executable (only for macOS/Linux):
    ```bash
-   chmod +x cli
+   chmod +x ensync-cli
    ```
 
 4. **Move the Binary to a Directory in Your PATH**
 
-   To make the `cli` command accessible globally, move it to a directory included in your `PATH`.
+   To make the `ensync-cli` command accessible globally, move it to a directory included in your `PATH`.
 
    - **macOS/Linux**:
      ```bash
-     sudo mv cli /usr/local/bin/
+     sudo mv ensync-cli   /usr/local/bin/
      ```
 
    - **Windows**:
-     Move the `cli.exe` binary to a folder (e.g., `C:\Program Files\CLI\`) and add that folder to your `PATH` environment variable.
+     Move the `ensync-cli.exe` binary to a folder (e.g., `C:\Program Files\CLI\`) and add that folder to your `PATH` environment variable.
 
 5. **Verify the Installation**
 
@@ -74,7 +74,7 @@ This guide outlines how to install and configure the CLI tool for multiple platf
 
 ## Configuration
 
-The CLI can be configured using either a configuration file or environment variables.
+The ENSYNC CLI can be configured using either a configuration file or environment variables.
 
 ### Configuration File
 

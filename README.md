@@ -23,7 +23,7 @@ If you have Go installed, you can install EnSync CLI directly using the `go inst
  
 ```bash
 # Install the EnSync CLI tool
-go install github.com/rossi1/ensync-cli@latest
+go install github.com/EnSync-engine/cli@latest
 ```
 
 To install a specific version (e.g., v1.0.0):

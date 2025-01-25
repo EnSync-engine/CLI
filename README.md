@@ -9,7 +9,7 @@ You can install the EnSync CLI Tool in two ways:
 ### 1. From Source
 ```bash
 # Clone the repository
-git clone https://github.com/rossi1/ensync-cli
+git clone https://github.com/EnSync-engine/cli
 cd ensync-cli
 
 # Build the binary

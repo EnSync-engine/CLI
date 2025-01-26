@@ -21,9 +21,6 @@ jobs:
       - name: List files
         run: ls -al
 
-      - name: Go Mod Info
-        run: go list -m all
-
       - name: Go Mod Tidy
         run: go mod tidy
         working-directory: ${{ github.workspace }}

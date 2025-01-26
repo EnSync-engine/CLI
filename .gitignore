@@ -8,11 +8,6 @@ dist/
 # macOS system files
 .DS_Store
 
-# Go-specific files
-*.test
-*.mod
-*.sum
-
 # GoReleaser
 .release/
 checksums.txt

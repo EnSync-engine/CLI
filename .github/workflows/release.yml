@@ -21,10 +21,6 @@ jobs:
       - name: List files
         run: ls -al
 
-      - name: Go Mod Tidy
-        run: go mod tidy
-        working-directory: ${{ github.workspace }}
-
       - name: Run Tests
         run: go test ./...
         working-directory: ${{ github.workspace }}
@@ -58,9 +54,12 @@ jobs:
           git push origin ${{ env.next_version }}
 
       - name: Install GoReleaser
-        run: brew install goreleaser
+        uses: goreleaser/goreleaser-action@v5
+        with:
+          version: v1.16.0
+          install-only: true
   
       - name: Run GoReleaser
-        run: goreleaser release --rm-dist
+        run: goreleaser release --clean
         env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

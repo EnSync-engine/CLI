@@ -40,7 +40,7 @@ jobs:
 
       - name: Run Tests
         run: |
-          go test -v -race ./...
+          go test -v -race -count=1 ./...
 
       - name: Determine Next Version
         id: next_version

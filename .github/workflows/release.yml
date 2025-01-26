@@ -21,6 +21,34 @@ jobs:
       - name: Run Tests
         run: go test -v -race ./...
 
+      - name: Determine Next Version
+        id: next_version
+        run: |
+          # Get the latest tag
+          latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          
+          # Extract the major, minor, and patch versions
+          major=$(echo $latest_tag | cut -d. -f1 | sed 's/v//')
+          minor=$(echo $latest_tag | cut -d. -f2)
+          patch=$(echo $latest_tag | cut -d. -f3)
+          
+          # Increment the patch version
+          next_patch=$((patch + 1))
+          
+          # Construct the new version tag
+          next_version="v${major}.${minor}.${next_patch}"
+          echo "Next version: $next_version"
+          echo "next_version=$next_version" >> $GITHUB_ENV
+
+      - name: Create and Push Tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag ${{ env.next_version }}
+          git push origin ${{ env.next_version }}
+
       - name: Install GoReleaser
         uses: goreleaser/goreleaser-action@v5
         with:

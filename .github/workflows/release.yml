@@ -20,12 +20,11 @@ jobs:
         with:
           go-version: stable  # Use latest stable Go version
 
-      - name: Debug Module Information
+      - name: Debug Workspace
         run: |
-          go version
-          go mod tidy
-          go mod verify
-          go mod graph
+          pwd
+          ls
+          find . -name "go.mod"
 
       - name: Run Tests
         run: go test -v -race ./...

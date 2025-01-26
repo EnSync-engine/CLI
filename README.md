@@ -49,14 +49,12 @@ Create a config file at `~/.ensync/config.yaml`:
 
 ```yaml
 base_url: "http://localhost:8080/api/v1/ensync"
-api_key: "your-api-key"
-debug: false
+sdebug: false
 ```
 
 ### Environment Variables
 ```bash
-export ENSYNC_API_KEY="BjwKUi9EjQtSnR9r9T0MfrrbddIOVCwB"
-export ENSYNC_BASE_URL="http://localhost:8080/api/v1/ensync"
+export ENSYNC_ACCESS_KEY="BjwKUi9EjQtSnR9r9T0MfrrbddIOVCwB"
 export ENSYNC_DEBUG=false
 ```
 
@@ -67,27 +65,27 @@ export ENSYNC_DEBUG=false
 List events:
 ```bash
 # List events with pagination
-ensync-cli event list --page 0 --limit 10 --order DESC --order-by createdAt
+ensync-cli --access-key "your-access-key" event list --page 0 --limit 10 --order DESC --order-by createdAt
 
 # List events with different ordering
-ensync-cli event list --order ASC --order-by name
+ensync-cli --access-key "your-access-key" event list --order ASC --order-by name
 ```
 
 Create event:
 ```bash
-ensync-cli event create --name "test-event" --payload '{"key":"value","another":"data"}'
+ensync-cli --access-key "your-access-key" event create --name "test-event" --payload '{"key":"value","another":"data"}'
 ```
 
 Update event:
 ```bash
 # Update event name
-ensync-cli event update --id 1 --name "updated/name/name"
+ensync-cli --access-key "your-access-key" event update --id 1 --name "updated/name/name"
 
 # Update event payload
-ensync-cli event update --id 1 --payload '{"key":"new-value"}'
+ensync-cli --access-key "your-access-key" event update --id 1 --payload '{"key":"new-value"}'
 
 # Get event payload by Name
-ensync-cli event get --name "updated/name/name"
+ensync-cli --access-key "your-access-key" event get --name "updated/name/name"
 ```
 
 ### Access Key Management
@@ -95,22 +93,22 @@ ensync-cli event get --name "updated/name/name"
 List access keys:
 ```bash
 # List all access keys
-ensync-cli access-key list
+ensync-cli --access-key "your-access-key" access-key list
 ```
 
 Create access key:
 ```bash
 # Create access key with permissions
-ensync-cli access-key create  --permissions '{"send": ["event1"], "receive": ["event2"]}'
+ensync-cli access-key create --access-key "your-access-key" --permissions '{"send": ["event1"], "receive": ["event2"]}'
 ```
 
 Manage permissions:
 ```bash
 # Get current permissions
-ensync-cli access-key permissions get --key "IeBTeDncBQmDMzJzKblyKfbctvgEKO8L"
+ensync-cli --access-key "your-access-key"  access-key permissions get --key "IeBTeDncBQmDMzJzKblyKfbctvgEKO8L"
 
 # Update permissions
-ensync-cli access-key permissions set --key "IeBTeDncBQmDMzJzKblyKfbctvgEKO8L" --permissions '{"send": ["event12344"], "receive": ["event23445"]}'
+ensync-cli --access-key "your-access-key"  access-key permissions set --key "IeBTeDncBQmDMzJzKblyKfbctvgEKO8L" --permissions '{"send": ["event12344"], "receive": ["event23445"]}'
 ```
 
 ### General Options

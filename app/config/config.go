@@ -11,7 +11,6 @@ import (
 
 type Config struct {
 	BaseURL string `mapstructure:"base_url"`
-	APIKey  string `mapstructure:"api_key"`
 	Debug   bool   `mapstructure:"debug"`
 }
 
@@ -50,12 +49,10 @@ func loadConfigFile() error {
 }
 
 func applyEnvVariables(config *Config) {
-	if config.APIKey == "" {
-		config.APIKey = os.Getenv("ENSYNC_API_KEY")
-	}
 	if config.BaseURL == "" {
 		config.BaseURL = os.Getenv("ENSYNC_BASE_URL")
 	}
+
 	if !config.Debug {
 		if debugEnv := os.Getenv("ENSYNC_DEBUG"); debugEnv != "" {
 			if debugValue, err := strconv.ParseBool(debugEnv); err == nil {
@@ -66,12 +63,10 @@ func applyEnvVariables(config *Config) {
 }
 
 func validateConfig(config *Config) error {
-	if config.APIKey == "" {
-		return fmt.Errorf("API key is required")
-	}
 	if config.BaseURL == "" {
-		return fmt.Errorf("Base URL is required")
+		return fmt.Errorf("base URL is required")
 	}
+
 	return nil
 }
 

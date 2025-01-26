@@ -1,7 +1,7 @@
 package api
 
 var (
-	XAPIHeader        string = "X-API-KEY"
+	XAccessKeyHeader  string = "X-ACCESS-KEY"
 	ContentTypeHeader        = "application/json"
 )
 

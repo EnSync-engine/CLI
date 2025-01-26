@@ -17,27 +17,42 @@ import (
 
 type mockHandler func(t *testing.T, w http.ResponseWriter, r *http.Request)
 
+const (
+	contentTypeHeader = "Content-Type"
+	jsonContentType   = "application/json"
+	xAccessKeyHeader  = "X-ACCESS-KEY"
+	testAccessKey     = "test-access-key"
+)
+
+var (
+	eventPath          = "/event"
+	accessKeyPath      = "/access-key"
+	accessKeyPermPath  = "/access-key/permissions/"
+	eventNamePathRegex = regexp.MustCompile(`^/event/[\w-]+$`)
+	accessKeyPermRegex = regexp.MustCompile(`^/access-key/permissions/[\w-]+$`)
+)
+
 func setupMockServer(t *testing.T) *httptest.Server {
 	handlers := map[string]mockHandler{
-		"GET/event":       mockListEvents,
-		"POST/event":      mockCreateEvent,
-		"GET/access-key":  mockListAccessKeys,
-		"POST/access-key": mockCreateAccessKey,
+		http.MethodGet + eventPath:      mockListEvents,
+		http.MethodPost + eventPath:     mockCreateEvent,
+		http.MethodGet + accessKeyPath:  mockListAccessKeys,
+		http.MethodPost + accessKeyPath: mockCreateAccessKey,
 	}
 
 	dynamicHandlers := map[*regexp.Regexp]map[string]mockHandler{
-		regexp.MustCompile(`^/access-key/permissions/[\w-]+$`): {
+		accessKeyPermRegex: {
 			http.MethodGet:  mockGetAccessKeyPermissions,
 			http.MethodPost: mockSetAccessKeyPermissions,
 		},
-		regexp.MustCompile(`^/event/[\w-]+$`): {
+		eventNamePathRegex: {
 			http.MethodPut: mockUpdateEvent,
 			http.MethodGet: mockGetEventByName,
 		},
 	}
 
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(contentTypeHeader, jsonContentType)
 
 		key := r.Method + r.URL.Path
 		if handler, exists := handlers[key]; exists {
@@ -54,6 +69,7 @@ func setupMockServer(t *testing.T) *httptest.Server {
 			}
 		}
 
+		w.WriteHeader(http.StatusNotFound)
 	}))
 }
 
@@ -61,7 +77,8 @@ func TestClient(t *testing.T) {
 	mockServer := setupMockServer(t)
 	defer mockServer.Close()
 
-	client := api.NewClient(mockServer.URL, "test-api-key")
+	client := api.NewClient(mockServer.URL)
+	client.SetAccessKey(testAccessKey) // Set the access key for authentication
 	ctx := context.Background()
 
 	t.Run("Events", func(t *testing.T) {
@@ -198,7 +215,7 @@ func testSetAccessKeyPermissions(ctx context.Context, client *api.Client) func(*
 }
 
 func mockListEvents(t *testing.T, w http.ResponseWriter, r *http.Request) {
-	verifyRequest(t, r, "GET", "test-api-key")
+	verifyRequest(t, r, http.MethodGet, testAccessKey)
 	sendJSONResponse(w, domain.EventList{
 		ResultsLength: 2,
 		Results: []*domain.Event{
@@ -209,17 +226,17 @@ func mockListEvents(t *testing.T, w http.ResponseWriter, r *http.Request) {
 }
 
 func mockCreateEvent(t *testing.T, w http.ResponseWriter, r *http.Request) {
-	verifyRequest(t, r, "POST", "test-api-key")
+	verifyRequest(t, r, http.MethodPost, testAccessKey)
 	w.WriteHeader(http.StatusOK)
 }
 
 func mockUpdateEvent(t *testing.T, w http.ResponseWriter, r *http.Request) {
-	verifyRequest(t, r, "PUT", "test-api-key")
+	verifyRequest(t, r, http.MethodPut, testAccessKey)
 	w.WriteHeader(http.StatusOK)
 }
 
 func mockGetEventByName(t *testing.T, w http.ResponseWriter, r *http.Request) {
-	verifyRequest(t, r, "GET", "test-api-key")
+	verifyRequest(t, r, http.MethodGet, testAccessKey)
 	event := &domain.Event{
 		ID:      1,
 		Name:    "test-event",
@@ -229,7 +246,7 @@ func mockGetEventByName(t *testing.T, w http.ResponseWriter, r *http.Request) {
 }
 
 func mockListAccessKeys(t *testing.T, w http.ResponseWriter, r *http.Request) {
-	verifyRequest(t, r, "GET", "test-api-key")
+	verifyRequest(t, r, http.MethodGet, testAccessKey)
 	sendJSONResponse(w, domain.AccessKeyList{
 		ResultsLength: 2,
 		Results: []*domain.AccessKeyPermissions{
@@ -252,12 +269,12 @@ func mockListAccessKeys(t *testing.T, w http.ResponseWriter, r *http.Request) {
 }
 
 func mockCreateAccessKey(t *testing.T, w http.ResponseWriter, r *http.Request) {
-	verifyRequest(t, r, "POST", "test-api-key")
+	verifyRequest(t, r, http.MethodPost, testAccessKey)
 	sendJSONResponse(w, map[string]string{"accessKey": "new-access-key-123"})
 }
 
 func mockGetAccessKeyPermissions(t *testing.T, w http.ResponseWriter, r *http.Request) {
-	verifyRequest(t, r, "GET", "test-api-key")
+	verifyRequest(t, r, http.MethodGet, testAccessKey)
 	sendJSONResponse(w, &domain.AccessKeyPermissions{
 		Key: "test-key",
 		Permissions: &domain.Permissions{
@@ -268,13 +285,13 @@ func mockGetAccessKeyPermissions(t *testing.T, w http.ResponseWriter, r *http.Re
 }
 
 func mockSetAccessKeyPermissions(t *testing.T, w http.ResponseWriter, r *http.Request) {
-	verifyRequest(t, r, "POST", "test-api-key")
+	verifyRequest(t, r, http.MethodPost, testAccessKey)
 	w.WriteHeader(http.StatusOK)
 }
 
-func verifyRequest(t *testing.T, r *http.Request, method, expectedAPIKey string) {
+func verifyRequest(t *testing.T, r *http.Request, method, expectedAccessKey string) {
 	assert.Equal(t, method, r.Method)
-	assert.Equal(t, expectedAPIKey, r.Header.Get("X-API-KEY"))
+	assert.Equal(t, expectedAccessKey, r.Header.Get(xAccessKeyHeader))
 }
 
 func sendJSONResponse(w http.ResponseWriter, data interface{}) {

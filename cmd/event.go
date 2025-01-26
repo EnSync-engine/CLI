@@ -12,11 +12,27 @@ import (
 )
 
 func newEventCmd(client *api.Client) *cobra.Command {
+	var accessKey string
+
 	cmd := &cobra.Command{
 		Use:   "event",
 		Short: "Manage events",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Validate the access key
+			if accessKey == "" {
+				return fmt.Errorf("access key is required")
+			}
+			// Set the access key in the client for authentication
+			client.SetAccessKey(accessKey)
+			return nil
+		},
 	}
 
+	// Add the access key flag to all event subcommands
+	cmd.PersistentFlags().StringVar(&accessKey, "access-key", "", "Access key for API authentication")
+	cmd.MarkPersistentFlagRequired("access-key")
+
+	// Add subcommands
 	cmd.AddCommand(
 		newEventListCmd(client),
 		newEventCreateCmd(client),
@@ -28,10 +44,12 @@ func newEventCmd(client *api.Client) *cobra.Command {
 }
 
 func newEventListCmd(client *api.Client) *cobra.Command {
-	var pageIndex int
-	var limit int
-	var order string
-	var orderBy string
+	var (
+		pageIndex int
+		limit     int
+		order     string
+		orderBy   string
+	)
 
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -62,8 +80,10 @@ func newEventListCmd(client *api.Client) *cobra.Command {
 }
 
 func newEventCreateCmd(client *api.Client) *cobra.Command {
-	var name string
-	var payload string
+	var (
+		name    string
+		payload string
+	)
 
 	cmd := &cobra.Command{
 		Use:   "create",
@@ -102,9 +122,11 @@ func newEventCreateCmd(client *api.Client) *cobra.Command {
 }
 
 func newEventUpdateCmd(client *api.Client) *cobra.Command {
-	var id int64
-	var name string
-	var payload string
+	var (
+		id      int64
+		name    string
+		payload string
+	)
 
 	cmd := &cobra.Command{
 		Use:   "update",

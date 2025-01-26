@@ -18,6 +18,13 @@ jobs:
         with:
           go-version: '1.23.2'
 
+      - name: Initialize Go Module
+        run: |
+          if [ ! -f go.mod ]; then
+              go mod init $(basename $GITHUB_REPOSITORY)
+              go mod tidy
+            fi
+  
       - name: List files
         run: ls -al
 

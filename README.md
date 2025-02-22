@@ -65,27 +65,27 @@ export ENSYNC_DEBUG=false
 List events:
 ```bash
 # List events with pagination
-ensync-cli --access-key "your-access-key" event list --page 0 --limit 10 --order DESC --order-by createdAt
+ensync-cli --access-key "access-key" event list --page 0 --limit 10 --order DESC --order-by createdAt
 
 # List events with different ordering
-ensync-cli --access-key "your-access-key" event list --order ASC --order-by name
+ensync-cli --access-key "access-key" event list --order ASC --order-by name
 ```
 
 Create event:
 ```bash
-ensync-cli --access-key "your-access-key" event create --name "test-event" --payload '{"key":"value","another":"data"}'
+ensync-cli --access-key "access-key" event create --name "test-event" --payload '{"key":"value","another":"data"}'
 ```
 
 Update event:
 ```bash
 # Update event name
-ensync-cli --access-key "your-access-key" event update --id 1 --name "updated/name/name"
+ensync-cli --access-key "access-key" event update --id 1 --name "updated/name/name"
 
 # Update event payload
-ensync-cli --access-key "your-access-key" event update --id 1 --payload '{"key":"new-value"}'
+ensync-cli --access-key "access-key" event update --id 1 --payload '{"key":"new-value"}'
 
 # Get event payload by Name
-ensync-cli --access-key "your-access-key" event get --name "updated/name/name"
+ensync-cli --access-key "access-key" event get --name "updated/name/name"
 ```
 
 ### Access Key Management
@@ -93,7 +93,7 @@ ensync-cli --access-key "your-access-key" event get --name "updated/name/name"
 List access keys:
 ```bash
 # List all access keys
-ensync-cli --access-key "your-access-key" access-key list
+ensync-cli --access-key "access-key" access-key list
 ```
 
 Create access key:
@@ -105,10 +105,10 @@ ensync-cli access-key create --access-key "your-access-key" --permissions '{"sen
 Manage permissions:
 ```bash
 # Get current permissions
-ensync-cli --access-key "your-access-key"  access-key permissions get --key "IeBTeDncBQmDMzJzKblyKfbctvgEKO8L"
+ensync-cli --access-key "access-key"  access-key permissions get --key "IeBTeDncBQmDMzJzKblyKfbctvgEKO8L"
 
 # Update permissions
-ensync-cli --access-key "your-access-key"  access-key permissions set --key "IeBTeDncBQmDMzJzKblyKfbctvgEKO8L" --permissions '{"send": ["event12344"], "receive": ["event23445"]}'
+ensync-cli --access-key "access-key"  access-key permissions set --key "IeBTeDncBQmDMzJzKblyKfbctvgEKO8L" --permissions '{"send": ["event12344"], "receive": ["event23445"]}'
 ```
 
 ### General Options

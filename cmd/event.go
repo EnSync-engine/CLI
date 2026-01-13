@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 
@@ -17,27 +16,24 @@ func newEventCmd(client *api.Client) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "event",
 		Short: "Manage events",
+		Long:  "Commands for listing, creating, updating, and retrieving events.",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			// Validate the access key
 			if accessKey == "" {
-				return fmt.Errorf("access key is required")
+				return fmt.Errorf("--access-key is required")
 			}
-			// Set the access key in the client for authentication
 			client.SetAccessKey(accessKey)
 			return nil
 		},
 	}
 
-	// Add the access key flag to all event subcommands
-	cmd.PersistentFlags().StringVar(&accessKey, "access-key", "", "Access key for API authentication")
-	cmd.MarkPersistentFlagRequired("access-key")
+	cmd.PersistentFlags().StringVar(&accessKey, "access-key", "", "access key for API authentication (required)")
+	_ = cmd.MarkPersistentFlagRequired("access-key")
 
-	// Add subcommands
 	cmd.AddCommand(
 		newEventListCmd(client),
+		newEventGetCmd(client),
 		newEventCreateCmd(client),
 		newEventUpdateCmd(client),
-		newEventGetByNameCmd(client),
 	)
 
 	return cmd
@@ -45,10 +41,10 @@ func newEventCmd(client *api.Client) *cobra.Command {
 
 func newEventListCmd(client *api.Client) *cobra.Command {
 	var (
-		pageIndex int
-		limit     int
-		order     string
-		orderBy   string
+		page    int
+		limit   int
+		order   string
+		orderBy string
 	)
 
 	cmd := &cobra.Command{
@@ -56,139 +52,125 @@ func newEventListCmd(client *api.Client) *cobra.Command {
 		Short: "List events",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			params := &api.ListParams{
-				PageIndex: pageIndex,
+				PageIndex: page,
 				Limit:     limit,
 				Order:     order,
 				OrderBy:   orderBy,
 			}
 
-			events, err := client.ListEvents(context.Background(), params)
+			events, err := client.ListEvents(cmd.Context(), params)
 			if err != nil {
-				return fmt.Errorf("failed to list events: %w", err)
+				return err
 			}
 
 			return printJSON(cmd.OutOrStdout(), events)
 		},
 	}
 
-	cmd.Flags().IntVar(&pageIndex, "page", 0, "Page index")
-	cmd.Flags().IntVar(&limit, "limit", 10, "Number of items per page")
-	cmd.Flags().StringVar(&order, "order", "DESC", "Sort order (ASC/DESC)")
-	cmd.Flags().StringVar(&orderBy, "order-by", "createdAt", "Field to order by")
+	cmd.Flags().IntVar(&page, "page", 0, "page index (0-based)")
+	cmd.Flags().IntVar(&limit, "limit", 20, "items per page")
+	cmd.Flags().StringVar(&order, "order", "DESC", "sort order (ASC or DESC)")
+	cmd.Flags().StringVar(&orderBy, "order-by", "createdAt", "field to order by")
+
+	return cmd
+}
+
+func newEventGetCmd(client *api.Client) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "get [name]",
+		Short: "Get event by name",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			event, err := client.GetEventByName(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			return printJSON(cmd.OutOrStdout(), event)
+		},
+	}
 
 	return cmd
 }
 
 func newEventCreateCmd(client *api.Client) *cobra.Command {
 	var (
-		name    string
-		payload string
+		name        string
+		payloadJSON string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "create",
-		Short: "Create a new event definition",
+		Short: "Create a new event",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if name == "" {
-				return fmt.Errorf("name is required")
-			}
-
-			var payloadMap map[string]string
-			if err := json.Unmarshal([]byte(payload), &payloadMap); err != nil {
-				return fmt.Errorf("invalid payload JSON: %w", err)
+			payload, err := parsePayloadJSON(payloadJSON)
+			if err != nil {
+				return err
 			}
 
 			event := &domain.Event{
 				Name:    name,
-				Payload: payloadMap,
+				Payload: payload,
 			}
 
-			ctx := context.Background()
-			err := client.CreateEvent(ctx, event)
-			if err != nil {
-				return fmt.Errorf("failed to create event: %w", err)
+			if err := client.CreateEvent(cmd.Context(), event); err != nil {
+				return err
 			}
 
-			fmt.Printf("Event '%s' created successfully\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "Event %q created successfully\n", name)
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVar(&name, "name", "", "Event name")
-	cmd.Flags().StringVar(&payload, "payload", "{}", "Event payload in JSON format")
-	cmd.MarkFlagRequired("name")
+	cmd.Flags().StringVar(&name, "name", "", "event name (required)")
+	cmd.Flags().StringVar(&payloadJSON, "payload", "{}", "event payload as JSON")
+	_ = cmd.MarkFlagRequired("name")
 
 	return cmd
 }
 
 func newEventUpdateCmd(client *api.Client) *cobra.Command {
 	var (
-		id      int64
-		name    string
-		payload string
+		id          string
+		name        string
+		payloadJSON string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "update",
-		Short: "Update an existing event definition",
+		Short: "Update an existing event",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if id == 0 {
-				return fmt.Errorf("id is required")
-			}
-
-			var payloadMap map[string]string
-			if err := json.Unmarshal([]byte(payload), &payloadMap); err != nil {
-				return fmt.Errorf("invalid payload JSON: %w", err)
+			payload, err := parsePayloadJSON(payloadJSON)
+			if err != nil {
+				return err
 			}
 
 			event := &domain.Event{
 				ID:      id,
 				Name:    name,
-				Payload: payloadMap,
+				Payload: payload,
 			}
 
-			ctx := context.Background()
-			err := client.UpdateEvent(ctx, event)
-			if err != nil {
-				return fmt.Errorf("failed to update event: %w", err)
+			if err := client.UpdateEvent(cmd.Context(), event); err != nil {
+				return err
 			}
 
-			fmt.Printf("Event '%d' updated successfully\n", id)
+			fmt.Fprintf(cmd.OutOrStdout(), "Event %s updated successfully\n", id)
 			return nil
 		},
 	}
 
-	cmd.Flags().Int64Var(&id, "id", 0, "Event ID")
-	cmd.Flags().StringVar(&name, "name", "", "New event name")
-	cmd.Flags().StringVar(&payload, "payload", "{}", "Event payload in JSON format")
-	cmd.MarkFlagRequired("id")
+	cmd.Flags().StringVar(&id, "id", "", "event ID (required)")
+	cmd.Flags().StringVar(&name, "name", "", "new event name")
+	cmd.Flags().StringVar(&payloadJSON, "payload", "{}", "event payload as JSON")
+	_ = cmd.MarkFlagRequired("id")
 
 	return cmd
 }
 
-func newEventGetByNameCmd(client *api.Client) *cobra.Command {
-	var name string
-
-	cmd := &cobra.Command{
-		Use:   "get",
-		Short: "Get event by name",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if name == "" {
-				return fmt.Errorf("name is required")
-			}
-
-			ctx := context.Background()
-			event, err := client.GetEventByName(ctx, name)
-			if err != nil {
-				return fmt.Errorf("failed to get event: %w", err)
-			}
-
-			return printJSON(cmd.OutOrStdout(), event)
-		},
+func parsePayloadJSON(s string) (map[string]any, error) {
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(s), &payload); err != nil {
+		return nil, fmt.Errorf("invalid payload JSON: %w", err)
 	}
-
-	cmd.Flags().StringVar(&name, "name", "", "Event name")
-	cmd.MarkFlagRequired("name")
-
-	return cmd
+	return payload, nil
 }

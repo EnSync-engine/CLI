@@ -3,14 +3,18 @@ package domain
 import "time"
 
 type Event struct {
-	ID        int64             `json:"id"`
-	Name      string            `json:"name"`
-	Payload   map[string]string `json:"payload"`
-	CreatedAt time.Time         `json:"createdAt"`
-	UpdatedAt time.Time         `json:"updatedAt"`
+	ID        string         `json:"id,omitempty"`
+	Name      string         `json:"name"`
+	Payload   map[string]any `json:"payload,omitempty"`
+	CreatedAt time.Time      `json:"createdAt,omitempty"`
+	UpdatedAt time.Time      `json:"updatedAt,omitempty"`
 }
 
 type EventList struct {
 	ResultsLength int      `json:"resultsLength"`
 	Results       []*Event `json:"results"`
+}
+
+func (e *Event) IsZero() bool {
+	return e.ID == "" && e.Name == ""
 }

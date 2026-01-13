@@ -1,25 +1,38 @@
 package cmd
 
 import (
-	"github.com/EnSync-engine/CLI/pkg/version"
+	"fmt"
+
 	"github.com/spf13/cobra"
+
+	"github.com/EnSync-engine/CLI/pkg/version"
 )
 
 func newVersionCmd() *cobra.Command {
-	var jsonFormat bool
+	var jsonOutput bool
 
 	cmd := &cobra.Command{
 		Use:   "version",
-		Short: "Print the version information",
+		Short: "Print version information",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if jsonFormat {
-				return printJSON(cmd.OutOrStdout(), version.Get())
+			v := version.Get()
+
+			if jsonOutput {
+				return printJSON(cmd.OutOrStdout(), v)
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "ensync %s\n", v.Version)
+			if v.Commit != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "  commit: %s\n", v.Commit)
+			}
+			if v.BuildDate != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "  built:  %s\n", v.BuildDate)
 			}
 			return nil
 		},
 	}
 
-	cmd.Flags().BoolVar(&jsonFormat, "json", false, "Output version information as JSON")
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "output as JSON")
 
 	return cmd
 }

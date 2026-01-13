@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,70 +10,79 @@ import (
 	"github.com/spf13/viper"
 )
 
+const (
+	envBaseURL   = "ENSYNC_BASE_URL"
+	envDebug     = "ENSYNC_DEBUG"
+	envConfigDir = "ENSYNC_CONFIG_DIR"
+
+	defaultConfigDirName = ".ensync"
+	configFileName       = "config"
+	configFileType       = "yaml"
+)
+
 type Config struct {
 	BaseURL string `mapstructure:"base_url"`
 	Debug   bool   `mapstructure:"debug"`
 }
 
 func Load() (*Config, error) {
-	config := &Config{}
-
-	if err := loadConfigFile(); err != nil {
+	if err := initViperPaths(); err != nil {
 		return nil, err
 	}
 
-	if err := viper.Unmarshal(config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	cfg := &Config{}
+	if err := viper.Unmarshal(cfg); err != nil {
+		return nil, fmt.Errorf("unmarshal config: %w", err)
 	}
 
-	applyEnvVariables(config)
+	applyEnvironmentOverrides(cfg)
 
-	if err := validateConfig(config); err != nil {
+	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 
-	return config, nil
+	return cfg, nil
 }
 
-func loadConfigFile() error {
-	configDir := getConfigDir()
-	viper.AddConfigPath(configDir)
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-
-	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return fmt.Errorf("failed to read config file: %w", err)
-		}
+func (c *Config) Validate() error {
+	if c.BaseURL == "" {
+		return errors.New("base_url is required: set via config file or ENSYNC_BASE_URL environment variable")
 	}
 	return nil
 }
 
-func applyEnvVariables(config *Config) {
-	if config.BaseURL == "" {
-		config.BaseURL = os.Getenv("ENSYNC_BASE_URL")
+func initViperPaths() error {
+	viper.AddConfigPath(configDir())
+	viper.SetConfigName(configFileName)
+	viper.SetConfigType(configFileType)
+
+	if err := viper.ReadInConfig(); err != nil {
+		var notFound viper.ConfigFileNotFoundError
+		if !errors.As(err, &notFound) {
+			return fmt.Errorf("read config file: %w", err)
+		}
 	}
 
-	if !config.Debug {
-		if debugEnv := os.Getenv("ENSYNC_DEBUG"); debugEnv != "" {
-			if debugValue, err := strconv.ParseBool(debugEnv); err == nil {
-				config.Debug = debugValue
+	return nil
+}
+
+func applyEnvironmentOverrides(cfg *Config) {
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = os.Getenv(envBaseURL)
+	}
+
+	if !cfg.Debug {
+		if val := os.Getenv(envDebug); val != "" {
+			if parsed, err := strconv.ParseBool(val); err == nil {
+				cfg.Debug = parsed
 			}
 		}
 	}
 }
 
-func validateConfig(config *Config) error {
-	if config.BaseURL == "" {
-		return fmt.Errorf("base URL is required")
-	}
-
-	return nil
-}
-
-func getConfigDir() string {
-	if configDir := os.Getenv("ENSYNC_CONFIG_DIR"); configDir != "" {
-		return configDir
+func configDir() string {
+	if dir := os.Getenv(envConfigDir); dir != "" {
+		return dir
 	}
 
 	home, err := os.UserHomeDir()
@@ -80,5 +90,5 @@ func getConfigDir() string {
 		return "."
 	}
 
-	return filepath.Join(home, ".ensync")
+	return filepath.Join(home, defaultConfigDirName)
 }

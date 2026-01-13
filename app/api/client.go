@@ -1,11 +1,8 @@
 package api
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -17,231 +14,262 @@ import (
 	"github.com/EnSync-engine/CLI/app/domain"
 )
 
-// Client is the API client for interacting with the EnSync API.
+var _ APIClient = (*Client)(nil)
+
+const (
+	defaultRetryMax     = 3
+	defaultRetryWaitMin = 1 * time.Second
+	defaultRetryWaitMax = 5 * time.Second
+)
+
 type Client struct {
-	baseURL     string
-	accessKey   string
-	httpClient  *http.Client
+	baseURL   string
+	accessKey string
+
+	http        *http.Client
 	rateLimiter *rate.Limiter
-	logger      *zap.Logger
+	log         *zap.Logger
 }
 
-// NewClient creates a new API client with the given base URL and options.
-func NewClient(baseURL string, opts ...ClientOption) *Client {
-	retryClient := retryablehttp.NewClient()
-	retryClient.RetryMax = 3
-	retryClient.RetryWaitMin = 1 * time.Second
-	retryClient.RetryWaitMax = 5 * time.Second
+func NewClient(baseURL string, options ...ClientOption) *Client {
+	retryable := retryablehttp.NewClient()
+	retryable.RetryMax = defaultRetryMax
+	retryable.RetryWaitMin = defaultRetryWaitMin
+	retryable.RetryWaitMax = defaultRetryWaitMax
+	retryable.Logger = nil
 
-	c := &Client{
-		baseURL:    baseURL,
-		httpClient: retryClient.StandardClient(),
-		logger:     zap.NewNop(),
+	client := &Client{
+		baseURL: baseURL,
+		http:    retryable.StandardClient(),
+		log:     zap.NewNop(),
 	}
 
-	for _, opt := range opts {
-		opt(c)
+	for _, opt := range options {
+		opt(client)
 	}
 
-	return c
+	if client.log != zap.NewNop() {
+		client.http.Transport = NewLoggingMiddleware(client.log)(client.http.Transport)
+	}
+
+	return client
 }
 
-// SetAccessKey sets the access key for API authentication.
-func (c *Client) SetAccessKey(accessKey string) {
-	c.accessKey = accessKey
+func (c *Client) SetAccessKey(key string) {
+	c.accessKey = key
 }
 
-// doRequest performs an HTTP request with the given method, path, query parameters, and body.
-func (c *Client) doRequest(ctx context.Context, method, path string, query url.Values, body interface{}) ([]byte, error) {
-	if c.rateLimiter != nil {
-		if err := c.rateLimiter.Wait(ctx); err != nil {
-			return nil, fmt.Errorf("rate limit error: %w", err)
-		}
+func (c *Client) execute(ctx context.Context, method, path string, queryParams url.Values, requestBody any) ([]byte, error) {
+	if err := c.waitForRateLimit(ctx); err != nil {
+		return nil, err
 	}
 
-	reqURL := c.baseURL + path
-	if query != nil {
-		reqURL = fmt.Sprintf("%s?%s", reqURL, query.Encode())
-	}
-
-	var bodyReader io.Reader
-	if body != nil {
-		bodyBytes, err := json.Marshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal request body: %w", err)
-		}
-		bodyReader = bytes.NewReader(bodyBytes)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, reqURL, bodyReader)
+	fullURL := buildURL(c.baseURL, path, queryParams)
+	body, err := marshalBody(requestBody)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, err
 	}
 
-	req.Header.Set(XAccessKeyHeader, c.accessKey)
-	if body != nil {
-		req.Header.Set("Content-Type", ContentTypeHeader)
-	}
-	req.Header.Set("Accept", ContentTypeHeader)
-
-	c.logger.Debug("Sending request",
-		zap.String("method", method),
-		zap.String("path", path),
-		zap.String("url", reqURL),
-		zap.String("query", query.Encode()),
-	)
-
-	resp, err := c.httpClient.Do(req)
+	request, err := buildRequest(ctx, method, fullURL, body, c.accessKey)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, err
 	}
-	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	response, err := c.http.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, fmt.Errorf("http request failed: %w", err)
+	}
+	defer response.Body.Close()
+
+	responseBody, err := readResponseBody(response)
+	if err != nil {
+		return nil, err
 	}
 
-	c.logger.Debug("Received response",
-		zap.Int("status", resp.StatusCode),
-		zap.Int("body_size", len(respBody)),
-	)
-
-	if resp.StatusCode >= 400 {
-		var apiErr APIError
-		if err := json.Unmarshal(respBody, &apiErr); err != nil {
-			return nil, fmt.Errorf("request failed with status %d: %s", resp.StatusCode, string(respBody))
-		}
-		apiErr.StatusCode = resp.StatusCode
-		return nil, &apiErr
+	if isErrorStatus(response.StatusCode) {
+		return nil, handleErrorResponse(response.StatusCode, responseBody)
 	}
 
-	return respBody, nil
+	return responseBody, nil
 }
 
-// ListEvents retrieves a list of events based on the provided parameters.
+func (c *Client) waitForRateLimit(ctx context.Context) error {
+	if c.rateLimiter == nil {
+		return nil
+	}
+	if err := c.rateLimiter.Wait(ctx); err != nil {
+		return fmt.Errorf("rate limit exceeded: %w", err)
+	}
+	return nil
+}
+
 func (c *Client) ListEvents(ctx context.Context, params *ListParams) (*domain.EventList, error) {
-	query := url.Values{}
-	query.Set("pageIndex", fmt.Sprintf("%d", params.PageIndex))
-	query.Set("limit", fmt.Sprintf("%d", params.Limit))
-	query.Set("order", params.Order)
-	query.Set("orderBy", params.OrderBy)
-
-	data, err := c.doRequest(ctx, http.MethodGet, "/event", query, nil)
+	responseData, err := c.execute(ctx, http.MethodGet, pathEvent, params.ToQuery(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list events: %w", err)
+		return nil, fmt.Errorf("list events: %w", err)
 	}
 
-	var response domain.EventList
-	if err := json.Unmarshal(data, &response); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	var events domain.EventList
+	if err := unmarshalResponse(responseData, &events); err != nil {
+		return nil, err
 	}
 
-	return &response, nil
+	return &events, nil
 }
 
-// CreateEvent creates a new event.
-func (c *Client) CreateEvent(ctx context.Context, event *domain.Event) error {
-	_, err := c.doRequest(ctx, http.MethodPost, "/event", nil, event)
-	return err
-}
+func (c *Client) GetEventByName(ctx context.Context, eventName string) (*domain.Event, error) {
+	path := fmt.Sprintf(pathEventByName, url.PathEscape(eventName))
 
-// UpdateEvent updates an existing event.
-func (c *Client) UpdateEvent(ctx context.Context, event *domain.Event) error {
-	url := fmt.Sprintf("/event/%d", event.ID)
-	payload := map[string]interface{}{
-		"name":    event.Name,
-		"payload": event.Payload,
-	}
-
-	_, err := c.doRequest(ctx, http.MethodPut, url, nil, payload)
-	return err
-}
-
-// GetEventByName retrieves an event by its name.
-func (c *Client) GetEventByName(ctx context.Context, name string) (*domain.Event, error) {
-	encodedName := url.PathEscape(name)
-	url := fmt.Sprintf("/event/%s", encodedName)
-
-	data, err := c.doRequest(ctx, http.MethodGet, url, nil, nil)
+	responseData, err := c.execute(ctx, http.MethodGet, path, nil, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get event by name '%s': %w", name, err)
+		return nil, fmt.Errorf("get event %q: %w", eventName, err)
 	}
 
 	var event domain.Event
-	if err := json.Unmarshal(data, &event); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal event response for name '%s': %w", name, err)
+	if err := unmarshalResponse(responseData, &event); err != nil {
+		return nil, err
 	}
 
 	return &event, nil
 }
 
-// ListAccessKeys retrieves a list of access keys.
+func (c *Client) CreateEvent(ctx context.Context, event *domain.Event) error {
+	if _, err := c.execute(ctx, http.MethodPost, pathEvent, nil, event); err != nil {
+		return fmt.Errorf("create event: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) UpdateEvent(ctx context.Context, event *domain.Event) error {
+	path := fmt.Sprintf(pathEventByID, event.ID)
+	updatePayload := map[string]any{
+		"name":    event.Name,
+		"payload": event.Payload,
+	}
+
+	if _, err := c.execute(ctx, http.MethodPut, path, nil, updatePayload); err != nil {
+		return fmt.Errorf("update event (id=%s): %w", event.ID, err)
+	}
+	return nil
+}
+
 func (c *Client) ListAccessKeys(ctx context.Context, params *ListParams) (*domain.AccessKeyList, error) {
-	query := url.Values{}
-	query.Set("pageIndex", fmt.Sprintf("%d", params.PageIndex))
-	query.Set("limit", fmt.Sprintf("%d", params.Limit))
-	query.Set("order", params.Order)
-	query.Set("orderBy", params.OrderBy)
-
-	data, err := c.doRequest(ctx, http.MethodGet, "/access-key", query, nil)
+	responseData, err := c.execute(ctx, http.MethodGet, pathAccessKey, params.ToQuery(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list access keys: %w", err)
+		return nil, fmt.Errorf("list access keys: %w", err)
 	}
 
-	var response domain.AccessKeyList
-	if err := json.Unmarshal(data, &response); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	var accessKeys domain.AccessKeyList
+	if err := unmarshalResponse(responseData, &accessKeys); err != nil {
+		return nil, err
 	}
 
-	return &response, nil
+	return &accessKeys, nil
 }
 
-// CreateAccessKey creates a new access key.
-func (c *Client) CreateAccessKey(ctx context.Context, permissions *domain.Permissions) (*domain.AccessKey, error) {
-	payload := map[string]interface{}{
-		"permissions": permissions,
-	}
+func (c *Client) GetAccessKeyByID(ctx context.Context, id string) (*domain.AccessKeyPermissions, error) {
+	path := fmt.Sprintf(pathAccessKeyByID, url.PathEscape(id))
 
-	data, err := c.doRequest(ctx, http.MethodPost, "/access-key", nil, payload)
+	responseData, err := c.execute(ctx, http.MethodGet, path, nil, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create access key: %w", err)
+		return nil, fmt.Errorf("get access key %q: %w", id, err)
 	}
 
-	var response domain.AccessKey
-	if err := json.Unmarshal(data, &response); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	var key domain.AccessKeyPermissions
+	if err := unmarshalResponse(responseData, &key); err != nil {
+		return nil, err
 	}
 
-	return &response, nil
+	return &key, nil
 }
 
-// GetAccessKeyPermissions retrieves permissions for a specific access key.
-func (c *Client) GetAccessKeyPermissions(ctx context.Context, key string) (*domain.AccessKeyPermissions, error) {
-	encodedKey := url.PathEscape(key)
-	url := fmt.Sprintf("/access-key/permissions/%s", encodedKey)
-
-	data, err := c.doRequest(ctx, http.MethodGet, url, nil, nil)
+func (c *Client) CreateAccessKey(ctx context.Context, req *domain.CreateAccessKeyRequest) (*domain.AccessKey, error) {
+	responseData, err := c.execute(ctx, http.MethodPost, pathAccessKey, nil, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get access key permissions: %w", err)
+		return nil, fmt.Errorf("create access key: %w", err)
 	}
 
-	var response domain.AccessKeyPermissions
-	if err := json.Unmarshal(data, &response); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	var key domain.AccessKey
+	if err := unmarshalResponse(responseData, &key); err != nil {
+		return nil, err
 	}
 
-	return &response, nil
+	return &key, nil
 }
 
-// SetAccessKeyPermissions updates permissions for a specific access key.
-func (c *Client) SetAccessKeyPermissions(ctx context.Context, key string, permissions *domain.Permissions) error {
-	url := fmt.Sprintf("/access-key/permissions/%s", key)
-	payload := map[string]interface{}{
+func (c *Client) DeleteAccessKey(ctx context.Context, id string) error {
+	path := fmt.Sprintf(pathAccessKeyByID, url.PathEscape(id))
+
+	if _, err := c.execute(ctx, http.MethodDelete, path, nil, nil); err != nil {
+		return fmt.Errorf("delete access key %q: %w", id, err)
+	}
+	return nil
+}
+
+func (c *Client) GetAccessKeyPermissions(ctx context.Context, accessKey string) (*domain.AccessKeyPermissions, error) {
+	path := fmt.Sprintf(pathAccessKeyPermissions, url.PathEscape(accessKey))
+
+	responseData, err := c.execute(ctx, http.MethodGet, path, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("get permissions for key %q: %w", accessKey, err)
+	}
+
+	var permissions domain.AccessKeyPermissions
+	if err := unmarshalResponse(responseData, &permissions); err != nil {
+		return nil, err
+	}
+
+	return &permissions, nil
+}
+
+func (c *Client) SetAccessKeyPermissions(ctx context.Context, accessKey string, permissions *domain.Permissions) error {
+	path := fmt.Sprintf(pathAccessKeyPermissions, url.PathEscape(accessKey))
+	updatePayload := map[string]any{
 		"send":    permissions.Send,
 		"receive": permissions.Receive,
 	}
 
-	_, err := c.doRequest(ctx, http.MethodPost, url, nil, payload)
-	return err
+	if _, err := c.execute(ctx, http.MethodPost, path, nil, updatePayload); err != nil {
+		return fmt.Errorf("set permissions for key %q: %w", accessKey, err)
+	}
+	return nil
+}
+
+func (c *Client) UpdateServiceKeyPair(ctx context.Context, accessKey string) (*domain.ServiceKeyPair, error) {
+	req := &domain.UpdateServiceKeyPairRequest{AccessKey: accessKey}
+
+	responseData, err := c.execute(ctx, http.MethodPut, pathServiceKeyPair, nil, req)
+	if err != nil {
+		return nil, fmt.Errorf("update service key pair: %w", err)
+	}
+
+	var keyPair domain.ServiceKeyPair
+	if err := unmarshalResponse(responseData, &keyPair); err != nil {
+		return nil, err
+	}
+
+	return &keyPair, nil
+}
+
+func (c *Client) ListWorkspaces(ctx context.Context, params *ListParams) (*domain.WorkspaceList, error) {
+	responseData, err := c.execute(ctx, http.MethodGet, pathWorkspace, params.ToQuery(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("list workspaces: %w", err)
+	}
+
+	var workspaces domain.WorkspaceList
+	if err := unmarshalResponse(responseData, &workspaces); err != nil {
+		return nil, err
+	}
+
+	return &workspaces, nil
+}
+
+func (c *Client) CreateWorkspace(ctx context.Context, name string) error {
+	req := &domain.CreateWorkspaceRequest{Name: name}
+
+	if _, err := c.execute(ctx, http.MethodPost, pathWorkspace, nil, req); err != nil {
+		return fmt.Errorf("create workspace: %w", err)
+	}
+	return nil
 }

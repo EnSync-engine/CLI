@@ -12,13 +12,13 @@ type ClientOption func(*Client)
 
 func WithLogger(logger *zap.Logger) ClientOption {
 	return func(c *Client) {
-		c.logger = logger
+		c.log = logger
 	}
 }
 
 func WithTimeout(timeout time.Duration) ClientOption {
 	return func(c *Client) {
-		c.httpClient.Timeout = timeout
+		c.http.Timeout = timeout
 	}
 }
 
@@ -28,8 +28,8 @@ func WithRateLimit(rps float64, burst int) ClientOption {
 	}
 }
 
-func WithCustomHTTPClient(httpClient *http.Client) ClientOption {
+func WithHTTPClient(httpClient *http.Client) ClientOption {
 	return func(c *Client) {
-		c.httpClient = httpClient
+		c.http = httpClient
 	}
 }

@@ -1,55 +1,54 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 
+	"github.com/spf13/cobra"
+
 	"github.com/EnSync-engine/CLI/app/api"
 	"github.com/EnSync-engine/CLI/app/domain"
-	"github.com/spf13/cobra"
 )
 
-// newAccessKeyCmd creates and returns the `access-key` command with its subcommands.
 func newAccessKeyCmd(client *api.Client) *cobra.Command {
 	var accessKey string
 
 	cmd := &cobra.Command{
 		Use:   "access-key",
 		Short: "Manage access keys",
+		Long:  "Commands for listing, creating, and managing access key permissions.",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			// Validate the access key
 			if accessKey == "" {
-				return fmt.Errorf("access key is required")
+				return fmt.Errorf("--access-key is required")
 			}
-
-			// Set the access key in the client for authentication
 			client.SetAccessKey(accessKey)
 			return nil
 		},
 	}
 
-	// Add the access key flag to all access-key subcommands
-	cmd.PersistentFlags().StringVar(&accessKey, "access-key", "", "Access key for API authentication")
-	cmd.MarkPersistentFlagRequired("access-key")
+	cmd.PersistentFlags().StringVar(&accessKey, "access-key", "", "access key for API authentication (required)")
+	_ = cmd.MarkPersistentFlagRequired("access-key")
 
 	cmd.AddCommand(
 		newAccessKeyListCmd(client),
+		newAccessKeyGetCmd(client),
 		newAccessKeyCreateCmd(client),
+		newAccessKeyDeleteCmd(client),
 		newAccessKeyPermissionsCmd(client),
+		newAccessKeyRotateCmd(client),
 	)
 
 	return cmd
 }
 
-// newAccessKeyListCmd creates and returns the `access-key list` command.
 func newAccessKeyListCmd(client *api.Client) *cobra.Command {
 	var (
-		pageIndex int
+		page      int
 		limit     int
 		order     string
 		orderBy   string
 		filterKey string
+		name      string
 	)
 
 	cmd := &cobra.Command{
@@ -57,59 +56,116 @@ func newAccessKeyListCmd(client *api.Client) *cobra.Command {
 		Short: "List access keys",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			params := &api.ListParams{
-				PageIndex: pageIndex,
+				PageIndex: page,
 				Limit:     limit,
 				Order:     order,
 				OrderBy:   orderBy,
-				Filter:    map[string]string{"accessKey": filterKey},
 			}
-			keys, err := client.ListAccessKeys(context.Background(), params)
+			if filterKey != "" {
+				params.Filter = map[string]string{"accessKey": filterKey}
+			}
+			if name != "" {
+				if params.Filter == nil {
+					params.Filter = make(map[string]string)
+				}
+				params.Filter["name"] = name
+			}
+
+			keys, err := client.ListAccessKeys(cmd.Context(), params)
 			if err != nil {
-				return fmt.Errorf("failed to list access keys: %w", err)
+				return err
 			}
 
 			return printJSON(cmd.OutOrStdout(), keys)
 		},
 	}
 
-	cmd.Flags().IntVar(&pageIndex, "page", 0, "Page index")
-	cmd.Flags().IntVar(&limit, "limit", 10, "Number of items per page")
-	cmd.Flags().StringVar(&order, "order", "DESC", "Sort order (ASC/DESC)")
-	cmd.Flags().StringVar(&orderBy, "order-by", "createdAt", "Field to order by")
-	cmd.Flags().StringVar(&filterKey, "key", "", "Filter by access key")
+	cmd.Flags().IntVar(&page, "page", 0, "page index (0-based)")
+	cmd.Flags().IntVar(&limit, "limit", 20, "items per page")
+	cmd.Flags().StringVar(&order, "order", "DESC", "sort order (ASC or DESC)")
+	cmd.Flags().StringVar(&orderBy, "order-by", "key", "field to order by")
+	cmd.Flags().StringVar(&filterKey, "filter-key", "", "filter by access key")
+	cmd.Flags().StringVar(&name, "name", "", "filter by name")
 
 	return cmd
 }
 
-// newAccessKeyCreateCmd creates and returns the `access-key create` command.
+func newAccessKeyGetCmd(client *api.Client) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "get [id]",
+		Short: "Get access key by ID",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			key, err := client.GetAccessKeyByID(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			return printJSON(cmd.OutOrStdout(), key)
+		},
+	}
+
+	return cmd
+}
+
 func newAccessKeyCreateCmd(client *api.Client) *cobra.Command {
-	var permissionsJSON string
+	var (
+		keyType         string
+		name            string
+		permissionsJSON string
+	)
 
 	cmd := &cobra.Command{
 		Use:   "create",
-		Short: "Create a new access key with permissions",
+		Short: "Create a new access key",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var permissions *domain.Permissions
 			if permissionsJSON != "" {
 				if err := json.Unmarshal([]byte(permissionsJSON), &permissions); err != nil {
-					return fmt.Errorf("failed to parse permissions JSON: %w", err)
+					return fmt.Errorf("invalid permissions JSON: %w", err)
 				}
 			}
 
-			createdKey, err := client.CreateAccessKey(context.Background(), permissions)
-			if err != nil {
-				return fmt.Errorf("failed to create access key: %w", err)
+			req := &domain.CreateAccessKeyRequest{
+				Type:        keyType,
+				Name:        name,
+				Permissions: permissions,
 			}
 
-			return printJSON(cmd.OutOrStdout(), createdKey)
+			key, err := client.CreateAccessKey(cmd.Context(), req)
+			if err != nil {
+				return err
+			}
+
+			return printJSON(cmd.OutOrStdout(), key)
 		},
 	}
 
-	cmd.Flags().StringVar(&permissionsJSON, "permissions", "", "JSON string representing the permissions")
+	cmd.Flags().StringVar(&keyType, "type", "SERVICE", "access key type (SERVICE or ACCOUNT)")
+	cmd.Flags().StringVar(&name, "name", "", "access key name (required)")
+	cmd.Flags().StringVar(&permissionsJSON, "permissions", "", `permissions JSON`)
+	_ = cmd.MarkFlagRequired("name")
+
 	return cmd
 }
 
-// newAccessKeyPermissionsCmd creates and returns the `access-key permissions` command.
+func newAccessKeyDeleteCmd(client *api.Client) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "delete [id]",
+		Short: "Delete an access key",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := client.DeleteAccessKey(cmd.Context(), args[0]); err != nil {
+				return err
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Access key %q deleted successfully\n", args[0])
+			return nil
+		},
+	}
+
+	return cmd
+}
+
 func newAccessKeyPermissionsCmd(client *api.Client) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "permissions",
@@ -124,60 +180,38 @@ func newAccessKeyPermissionsCmd(client *api.Client) *cobra.Command {
 	return cmd
 }
 
-// newAccessKeyGetPermissionsCmd creates and returns the `access-key permissions get` command.
 func newAccessKeyGetPermissionsCmd(client *api.Client) *cobra.Command {
-	var accessKey string
-
 	cmd := &cobra.Command{
-		Use:   "get",
-		Short: "Get access key permissions",
+		Use:   "get [key]",
+		Short: "Get permissions for an access key",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if accessKey == "" {
-				return fmt.Errorf("access key is required")
-			}
-
-			permissions, err := client.GetAccessKeyPermissions(context.Background(), accessKey)
+			permissions, err := client.GetAccessKeyPermissions(cmd.Context(), args[0])
 			if err != nil {
-				return fmt.Errorf("failed to get permissions: %w", err)
+				return err
 			}
-
 			return printJSON(cmd.OutOrStdout(), permissions)
 		},
 	}
 
-	cmd.Flags().StringVar(&accessKey, "key", "", "Access key")
-	cmd.MarkFlagRequired("key")
-
 	return cmd
 }
 
-// newAccessKeySetPermissionsCmd creates and returns the `access-key permissions set` command.
 func newAccessKeySetPermissionsCmd(client *api.Client) *cobra.Command {
-	var (
-		accessKey       string
-		permissionsJSON string
-	)
+	var permissionsJSON string
 
 	cmd := &cobra.Command{
-		Use:   "set",
-		Short: "Set access key permissions",
+		Use:   "set [key]",
+		Short: "Set permissions for an access key",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if accessKey == "" {
-				return fmt.Errorf("access key is required")
-			}
-
-			if permissionsJSON == "" {
-				return fmt.Errorf("permissions JSON is required")
-			}
-
 			var permissions domain.Permissions
 			if err := json.Unmarshal([]byte(permissionsJSON), &permissions); err != nil {
-				return fmt.Errorf("failed to parse permissions JSON: %w", err)
+				return fmt.Errorf("invalid permissions JSON: %w", err)
 			}
 
-			err := client.SetAccessKeyPermissions(context.Background(), accessKey, &permissions)
-			if err != nil {
-				return fmt.Errorf("failed to set permissions: %w", err)
+			if err := client.SetAccessKeyPermissions(cmd.Context(), args[0], &permissions); err != nil {
+				return err
 			}
 
 			fmt.Fprintln(cmd.OutOrStdout(), "Permissions updated successfully")
@@ -185,10 +219,25 @@ func newAccessKeySetPermissionsCmd(client *api.Client) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&accessKey, "key", "", "Access key")
-	cmd.Flags().StringVar(&permissionsJSON, "permissions", "", "JSON string representing permissions")
-	cmd.MarkFlagRequired("key")
-	cmd.MarkFlagRequired("permissions")
+	cmd.Flags().StringVar(&permissionsJSON, "permissions", "", `permissions JSON (required)`)
+	_ = cmd.MarkFlagRequired("permissions")
+
+	return cmd
+}
+
+func newAccessKeyRotateCmd(client *api.Client) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "rotate [key]",
+		Short: "Rotate service key pair for an access key",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			keyPair, err := client.UpdateServiceKeyPair(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			return printJSON(cmd.OutOrStdout(), keyPair)
+		},
+	}
 
 	return cmd
 }

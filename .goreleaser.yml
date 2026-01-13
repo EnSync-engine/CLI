@@ -5,7 +5,7 @@ before:
 
 builds:
   - id: ensync-cli
-    binary: ensync-cli
+    binary: ensync
     env:
       - CGO_ENABLED=0
     goos:
@@ -17,9 +17,9 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X github.com/rossi1/ensync-cli/pkg/version.Version={{.Version}}
-      - -X github.com/rossi1/ensync-cli/pkg/version.Commit={{.Commit}}
-      - -X github.com/rossi1/ensync-cli/pkg/version.BuildDate={{.Date}}
+      - -X github.com/EnSync-engine/CLI/pkg/version.version={{.Version}}
+      - -X github.com/EnSync-engine/CLI/pkg/version.commit={{.Commit}}
+      - -X github.com/EnSync-engine/CLI/pkg/version.buildDate={{.Date}}
 
 archives:
   - id: linux_darwin
@@ -28,21 +28,11 @@ archives:
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     files:
       - README.md
-      - cmd/**/*
-      - app/**/*
-      - go.mod
-      - go.sum
-      - main.go
     builds:
       - ensync-cli
     format_overrides:
       - goos: windows
         format: zip
-
-source:
-  enabled: true
-  name_template: '{{ .ProjectName }}_{{ .Version }}_source'
-  format: 'zip'
 
 checksum:
   name_template: "checksums.txt"

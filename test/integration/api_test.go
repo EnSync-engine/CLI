@@ -15,289 +15,286 @@ import (
 	"github.com/EnSync-engine/CLI/app/domain"
 )
 
-type mockHandler func(t *testing.T, w http.ResponseWriter, r *http.Request)
-
 const (
-	contentTypeHeader = "Content-Type"
-	jsonContentType   = "application/json"
-	xAccessKeyHeader  = "X-ACCESS-KEY"
-	testAccessKey     = "test-access-key"
+	testAccessKey = "test-access-key"
+	headerAccess  = "X-ACCESS-KEY"
 )
 
 var (
-	eventPath          = "/event"
-	accessKeyPath      = "/access-key"
-	accessKeyPermPath  = "/access-key/permissions/"
-	eventNamePathRegex = regexp.MustCompile(`^/event/[\w-]+$`)
-	accessKeyPermRegex = regexp.MustCompile(`^/access-key/permissions/[\w-]+$`)
+	eventNamePattern     = regexp.MustCompile(`^/event/[\w-]+$`)
+	accessKeyIDPattern   = regexp.MustCompile(`^/access-key/[\w-]+$`)
+	accessKeyPermPattern = regexp.MustCompile(`^/access-key/[\w-]+/permissions$`)
 )
 
-func setupMockServer(t *testing.T) *httptest.Server {
-	handlers := map[string]mockHandler{
-		http.MethodGet + eventPath:      mockListEvents,
-		http.MethodPost + eventPath:     mockCreateEvent,
-		http.MethodGet + accessKeyPath:  mockListAccessKeys,
-		http.MethodPost + accessKeyPath: mockCreateAccessKey,
-	}
-
-	dynamicHandlers := map[*regexp.Regexp]map[string]mockHandler{
-		accessKeyPermRegex: {
-			http.MethodGet:  mockGetAccessKeyPermissions,
-			http.MethodPost: mockSetAccessKeyPermissions,
-		},
-		eventNamePathRegex: {
-			http.MethodPut: mockUpdateEvent,
-			http.MethodGet: mockGetEventByName,
-		},
-	}
-
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set(contentTypeHeader, jsonContentType)
-
-		key := r.Method + r.URL.Path
-		if handler, exists := handlers[key]; exists {
-			handler(t, w, r)
-			return
-		}
-
-		for regex, methodHandlers := range dynamicHandlers {
-			if regex.MatchString(r.URL.Path) {
-				if handler, exists := methodHandlers[r.Method]; exists {
-					handler(t, w, r)
-					return
-				}
-			}
-		}
-
-		w.WriteHeader(http.StatusNotFound)
-	}))
-}
-
 func TestClient(t *testing.T) {
-	mockServer := setupMockServer(t)
-	defer mockServer.Close()
+	server := newMockServer(t)
+	defer server.Close()
 
-	client := api.NewClient(mockServer.URL)
-	client.SetAccessKey(testAccessKey) // Set the access key for authentication
+	client := api.NewClient(server.URL)
+	client.SetAccessKey(testAccessKey)
+
 	ctx := context.Background()
 
 	t.Run("Events", func(t *testing.T) {
-		t.Run("List", func(t *testing.T) {
-			testListEvents(ctx, client)(t)
-		})
-		t.Run("Create", func(t *testing.T) {
-			testCreateEvent(ctx, client)(t)
-		})
-		t.Run("Update", func(t *testing.T) {
-			testUpdateEvent(ctx, client)(t)
-		})
-		t.Run("GetByName", func(t *testing.T) {
-			testGetEventByName(ctx, client)(t)
-		})
+		testEventOperations(t, ctx, client)
 	})
 
 	t.Run("AccessKeys", func(t *testing.T) {
-		t.Run("List", func(t *testing.T) {
-			testListAccessKeys(ctx, client)(t)
-		})
-		t.Run("Create", func(t *testing.T) {
-			testCreateAccessKey(ctx, client)(t)
-		})
-		t.Run("GetPermissions", func(t *testing.T) {
-			testGetAccessKeyPermissions(ctx, client)(t)
-		})
-		t.Run("SetPermissions", func(t *testing.T) {
-			testSetAccessKeyPermissions(ctx, client)(t)
-		})
+		testAccessKeyOperations(t, ctx, client)
+	})
+
+	t.Run("Workspaces", func(t *testing.T) {
+		testWorkspaceOperations(t, ctx, client)
 	})
 }
 
-func testListEvents(ctx context.Context, client *api.Client) func(*testing.T) {
-	return func(t *testing.T) {
-		params := &api.ListParams{
-			PageIndex: 0,
-			Limit:     10,
-			Order:     "DESC",
-			OrderBy:   "createdAt",
-		}
+func testEventOperations(t *testing.T, ctx context.Context, client *api.Client) {
+	t.Run("List", func(t *testing.T) {
+		params := api.DefaultListParams()
 
 		events, err := client.ListEvents(ctx, params)
+
 		require.NoError(t, err)
 		require.NotNil(t, events)
 		assert.Equal(t, 2, events.ResultsLength)
 		assert.Len(t, events.Results, 2)
-	}
-}
+	})
 
-func testGetEventByName(ctx context.Context, client *api.Client) func(*testing.T) {
-	return func(t *testing.T) {
+	t.Run("GetByName", func(t *testing.T) {
 		event, err := client.GetEventByName(ctx, "test-event")
+
 		require.NoError(t, err)
 		require.NotNil(t, event)
 		assert.Equal(t, "test-event", event.Name)
-	}
-}
+	})
 
-func testCreateEvent(ctx context.Context, client *api.Client) func(*testing.T) {
-	return func(t *testing.T) {
+	t.Run("Create", func(t *testing.T) {
 		event := &domain.Event{
-			Name: "new-event",
-			Payload: map[string]string{
-				"key": "value",
-			},
+			Name:    "new-event",
+			Payload: map[string]any{"key": "value"},
 		}
+
 		err := client.CreateEvent(ctx, event)
-		require.NoError(t, err)
-	}
-}
 
-func testUpdateEvent(ctx context.Context, client *api.Client) func(*testing.T) {
-	return func(t *testing.T) {
+		require.NoError(t, err)
+	})
+
+	t.Run("Update", func(t *testing.T) {
 		event := &domain.Event{
-			ID:   123,
-			Name: "updated-event",
-			Payload: map[string]string{
-				"key": "new-value",
-			},
+			ID:      "event-123",
+			Name:    "updated-event",
+			Payload: map[string]any{"key": "new-value"},
 		}
+
 		err := client.UpdateEvent(ctx, event)
+
 		require.NoError(t, err)
-	}
+	})
 }
 
-func testListAccessKeys(ctx context.Context, client *api.Client) func(*testing.T) {
-	return func(t *testing.T) {
-		params := &api.ListParams{
-			PageIndex: 0,
-			Limit:     10,
-			Order:     "DESC",
-			OrderBy:   "createdAt",
-		}
+func testAccessKeyOperations(t *testing.T, ctx context.Context, client *api.Client) {
+	t.Run("List", func(t *testing.T) {
+		params := api.DefaultListParams()
 
 		keys, err := client.ListAccessKeys(ctx, params)
+
 		require.NoError(t, err)
 		require.NotNil(t, keys)
 		assert.Equal(t, 2, keys.ResultsLength)
-	}
-}
+	})
 
-func testCreateAccessKey(ctx context.Context, client *api.Client) func(*testing.T) {
-	return func(t *testing.T) {
-		permissions := &domain.Permissions{
-			Send:    []string{"event1", "event2"},
-			Receive: []string{"event3"},
+	t.Run("GetByID", func(t *testing.T) {
+		key, err := client.GetAccessKeyByID(ctx, "test-id-123")
+
+		require.NoError(t, err)
+		require.NotNil(t, key)
+		assert.Equal(t, "test-id-123", key.ID)
+	})
+
+	t.Run("Create", func(t *testing.T) {
+		req := &domain.CreateAccessKeyRequest{
+			Type: "SERVICE",
+			Name: "test",
+			Permissions: &domain.Permissions{
+				Send:    []string{"event1", "event2"},
+				Receive: []string{"event3"},
+			},
 		}
-		created, err := client.CreateAccessKey(ctx, permissions)
+
+		created, err := client.CreateAccessKey(ctx, req)
+
 		require.NoError(t, err)
 		require.NotNil(t, created)
 		assert.NotEmpty(t, created.AccessKey)
-	}
-}
+	})
 
-func testGetAccessKeyPermissions(ctx context.Context, client *api.Client) func(*testing.T) {
-	return func(t *testing.T) {
-		permissions, err := client.GetAccessKeyPermissions(ctx, "test-key")
+	t.Run("Delete", func(t *testing.T) {
+		err := client.DeleteAccessKey(ctx, "delete-id-123")
+
 		require.NoError(t, err)
-		require.NotNil(t, permissions)
-		assert.NotNil(t, permissions.Permissions)
-	}
-}
+	})
 
-func testSetAccessKeyPermissions(ctx context.Context, client *api.Client) func(*testing.T) {
-	return func(t *testing.T) {
+	t.Run("GetPermissions", func(t *testing.T) {
+		perms, err := client.GetAccessKeyPermissions(ctx, "test-key")
+
+		require.NoError(t, err)
+		require.NotNil(t, perms)
+		assert.NotNil(t, perms.Permissions)
+	})
+
+	t.Run("SetPermissions", func(t *testing.T) {
 		permissions := &domain.Permissions{
 			Send:    []string{"event1", "event2"},
 			Receive: []string{"event3"},
 		}
+
 		err := client.SetAccessKeyPermissions(ctx, "test-key", permissions)
+
 		require.NoError(t, err)
-	}
+	})
+
+	t.Run("UpdateServiceKeyPair", func(t *testing.T) {
+		keyPair, err := client.UpdateServiceKeyPair(ctx, "test-key")
+
+		require.NoError(t, err)
+		require.NotNil(t, keyPair)
+		assert.NotEmpty(t, keyPair.PublicKey)
+		assert.NotEmpty(t, keyPair.PrivateKey)
+	})
 }
 
-func mockListEvents(t *testing.T, w http.ResponseWriter, r *http.Request) {
-	verifyRequest(t, r, http.MethodGet, testAccessKey)
-	sendJSONResponse(w, domain.EventList{
+func testWorkspaceOperations(t *testing.T, ctx context.Context, client *api.Client) {
+	t.Run("List", func(t *testing.T) {
+		params := api.DefaultListParams()
+
+		workspaces, err := client.ListWorkspaces(ctx, params)
+
+		require.NoError(t, err)
+		require.NotNil(t, workspaces)
+		assert.Equal(t, 1, workspaces.ResultsLength)
+	})
+
+	t.Run("Create", func(t *testing.T) {
+		err := client.CreateWorkspace(ctx, "new-workspace")
+
+		require.NoError(t, err)
+	})
+}
+
+func newMockServer(t *testing.T) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		assert.Equal(t, testAccessKey, r.Header.Get(headerAccess))
+
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/event":
+			handleListEvents(w)
+		case r.Method == http.MethodPost && r.URL.Path == "/event":
+			w.WriteHeader(http.StatusCreated)
+		case r.Method == http.MethodGet && eventNamePattern.MatchString(r.URL.Path):
+			handleGetEvent(w)
+		case r.Method == http.MethodPut && eventNamePattern.MatchString(r.URL.Path):
+			w.WriteHeader(http.StatusOK)
+
+		case r.Method == http.MethodGet && r.URL.Path == "/access-key":
+			handleListAccessKeys(w)
+		case r.Method == http.MethodPost && r.URL.Path == "/access-key":
+			handleCreateAccessKey(w)
+		case r.Method == http.MethodGet && accessKeyIDPattern.MatchString(r.URL.Path) && !accessKeyPermPattern.MatchString(r.URL.Path):
+			handleGetAccessKeyByID(w)
+		case r.Method == http.MethodDelete && accessKeyIDPattern.MatchString(r.URL.Path):
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodGet && accessKeyPermPattern.MatchString(r.URL.Path):
+			handleGetAccessKeyPermissions(w)
+		case r.Method == http.MethodPost && accessKeyPermPattern.MatchString(r.URL.Path):
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodPut && r.URL.Path == "/access/service-key-pair":
+			handleUpdateServiceKeyPair(w)
+
+		case r.Method == http.MethodGet && r.URL.Path == "/workspace":
+			handleListWorkspaces(w)
+		case r.Method == http.MethodPost && r.URL.Path == "/workspace":
+			w.WriteHeader(http.StatusOK)
+			writeJSON(w, map[string]any{})
+
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+}
+
+func handleListEvents(w http.ResponseWriter) {
+	writeJSON(w, domain.EventList{
 		ResultsLength: 2,
 		Results: []*domain.Event{
-			{ID: 1, Name: "event1", Payload: map[string]string{"key": "value1"}},
-			{ID: 2, Name: "event2", Payload: map[string]string{"key": "value2"}},
+			{ID: "event-1", Name: "event1", Payload: map[string]any{"key": "value1"}},
+			{ID: "event-2", Name: "event2", Payload: map[string]any{"key": "value2"}},
 		},
 	})
 }
 
-func mockCreateEvent(t *testing.T, w http.ResponseWriter, r *http.Request) {
-	verifyRequest(t, r, http.MethodPost, testAccessKey)
-	w.WriteHeader(http.StatusOK)
-}
-
-func mockUpdateEvent(t *testing.T, w http.ResponseWriter, r *http.Request) {
-	verifyRequest(t, r, http.MethodPut, testAccessKey)
-	w.WriteHeader(http.StatusOK)
-}
-
-func mockGetEventByName(t *testing.T, w http.ResponseWriter, r *http.Request) {
-	verifyRequest(t, r, http.MethodGet, testAccessKey)
-	event := &domain.Event{
-		ID:      1,
+func handleGetEvent(w http.ResponseWriter) {
+	writeJSON(w, domain.Event{
+		ID:      "event-1",
 		Name:    "test-event",
-		Payload: map[string]string{"key": "value"},
-	}
-	sendJSONResponse(w, event)
+		Payload: map[string]any{"key": "value"},
+	})
 }
 
-func mockListAccessKeys(t *testing.T, w http.ResponseWriter, r *http.Request) {
-	verifyRequest(t, r, http.MethodGet, testAccessKey)
-	sendJSONResponse(w, domain.AccessKeyList{
+func handleListAccessKeys(w http.ResponseWriter) {
+	writeJSON(w, domain.AccessKeyList{
 		ResultsLength: 2,
 		Results: []*domain.AccessKeyPermissions{
-			{
-				Key: "key1",
-				Permissions: &domain.Permissions{
-					Send:    []string{"event1"},
-					Receive: []string{"event2"},
-				},
-			},
-			{
-				Key: "key2",
-				Permissions: &domain.Permissions{
-					Send:    []string{"event3"},
-					Receive: []string{"event4"},
-				},
-			},
+			{ID: "id1", Key: "key1", Permissions: &domain.Permissions{Send: []string{"event1"}, Receive: []string{"event2"}}},
+			{ID: "id2", Key: "key2", Permissions: &domain.Permissions{Send: []string{"event3"}, Receive: []string{"event4"}}},
 		},
 	})
 }
 
-func mockCreateAccessKey(t *testing.T, w http.ResponseWriter, r *http.Request) {
-	verifyRequest(t, r, http.MethodPost, testAccessKey)
-	sendJSONResponse(w, map[string]string{"accessKey": "new-access-key-123"})
+func handleCreateAccessKey(w http.ResponseWriter) {
+	writeJSON(w, domain.AccessKey{
+		ID:        "new-id-123",
+		AccessKey: "new-access-key-123",
+		Name:      "test",
+		Type:      "SERVICE",
+	})
 }
 
-func mockGetAccessKeyPermissions(t *testing.T, w http.ResponseWriter, r *http.Request) {
-	verifyRequest(t, r, http.MethodGet, testAccessKey)
-	sendJSONResponse(w, &domain.AccessKeyPermissions{
-		Key: "test-key",
-		Permissions: &domain.Permissions{
-			Send:    []string{"event1"},
-			Receive: []string{"event2"},
+func handleGetAccessKeyByID(w http.ResponseWriter) {
+	writeJSON(w, domain.AccessKeyPermissions{
+		ID:          "test-id-123",
+		Key:         "test-key",
+		Name:        "Test Key",
+		Type:        "SERVICE",
+		Permissions: &domain.Permissions{Send: []string{"event1"}, Receive: []string{"event2"}},
+	})
+}
+
+func handleGetAccessKeyPermissions(w http.ResponseWriter) {
+	writeJSON(w, domain.AccessKeyPermissions{
+		Key:         "test-key",
+		Permissions: &domain.Permissions{Send: []string{"event1"}, Receive: []string{"event2"}},
+	})
+}
+
+func handleUpdateServiceKeyPair(w http.ResponseWriter) {
+	writeJSON(w, domain.ServiceKeyPair{
+		PublicKey:  "new-public-key",
+		PrivateKey: "new-private-key",
+	})
+}
+
+func handleListWorkspaces(w http.ResponseWriter) {
+	writeJSON(w, domain.WorkspaceList{
+		ResultsLength: 1,
+		Results: []*domain.Workspace{
+			{ID: "ws-1", Name: "gms", Path: "gms"},
 		},
 	})
 }
 
-func mockSetAccessKeyPermissions(t *testing.T, w http.ResponseWriter, r *http.Request) {
-	verifyRequest(t, r, http.MethodPost, testAccessKey)
-	w.WriteHeader(http.StatusOK)
-}
-
-func verifyRequest(t *testing.T, r *http.Request, method, expectedAccessKey string) {
-	assert.Equal(t, method, r.Method)
-	assert.Equal(t, expectedAccessKey, r.Header.Get(xAccessKeyHeader))
-}
-
-func sendJSONResponse(w http.ResponseWriter, data interface{}) {
-	w.WriteHeader(http.StatusOK)
-	err := json.NewEncoder(w).Encode(data)
-	if err != nil {
+func writeJSON(w http.ResponseWriter, v any) {
+	if err := json.NewEncoder(w).Encode(v); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

@@ -17,7 +17,10 @@ go build -o ensync ./main.go
 ./ensync version
 ```
 
-### 2. Using Go Install
+### 2. Download Binary (No Go required)
+Download the pre-compiled binary for your OS/Arch from the [Releases](https://github.com/EnSync-engine/CLI/releases) page.
+
+### 3. Using Go Install
 ```bash
 go install github.com/EnSync-engine/cli@latest
 ```

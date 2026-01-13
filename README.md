@@ -58,7 +58,7 @@ Create a config file at:
 *   **Windows**: `%UserProfile%\.ensync\config.yaml`
 
 ```yaml
-base_url: "https://access.gms.ensync.cloud/api/v1/ensync"
+base_url: "http://localhost:8080/api/v1/ensync"
 debug: false
 ```
 
@@ -67,14 +67,14 @@ debug: false
 **macOS & Linux**
 ```bash
 export ENSYNC_ACCESS_KEY="your-access-key"
-export ENSYNC_BASE_URL="https://access.gms.ensync.cloud/api/v1/ensync"
+export ENSYNC_BASE_URL="http://localhost:8080/api/v1/ensync"
 export ENSYNC_DEBUG=false
 ```
 
 **Windows (PowerShell)**
 ```powershell
 $env:ENSYNC_ACCESS_KEY="your-access-key"
-$env:ENSYNC_BASE_URL="https://access.gms.ensync.cloud/api/v1/ensync"
+$env:ENSYNC_BASE_URL="http://localhost:8080/api/v1/ensync"
 $env:ENSYNC_DEBUG="false"
 ```
 

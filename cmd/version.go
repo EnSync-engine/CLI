@@ -21,12 +21,12 @@ func newVersionCmd() *cobra.Command {
 				return printJSON(cmd.OutOrStdout(), v)
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "ensync %s\n", v.Version)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "ensync %s\n", v.Version)
 			if v.Commit != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "  commit: %s\n", v.Commit)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  commit: %s\n", v.Commit)
 			}
 			if v.BuildDate != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "  built:  %s\n", v.BuildDate)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  built:  %s\n", v.BuildDate)
 			}
 			return nil
 		},

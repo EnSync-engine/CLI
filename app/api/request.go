@@ -12,7 +12,7 @@ import (
 
 func buildURL(baseURL, path string, query url.Values) string {
 	reqURL := baseURL + path
-	if query != nil && len(query) > 0 {
+	if len(query) > 0 {
 		reqURL = fmt.Sprintf("%s?%s", reqURL, query.Encode())
 	}
 	return reqURL

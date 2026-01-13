@@ -82,7 +82,7 @@ func newWorkspaceCreateCmd(client *api.Client) *cobra.Command {
 				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Workspace %q created successfully\n", name)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Workspace %q created successfully\n", name)
 			return nil
 		},
 	}

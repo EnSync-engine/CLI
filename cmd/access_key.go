@@ -158,7 +158,7 @@ func newAccessKeyDeleteCmd(client *api.Client) *cobra.Command {
 				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Access key %q deleted successfully\n", args[0])
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Access key %q deleted successfully\n", args[0])
 			return nil
 		},
 	}
@@ -214,7 +214,7 @@ func newAccessKeySetPermissionsCmd(client *api.Client) *cobra.Command {
 				return err
 			}
 
-			fmt.Fprintln(cmd.OutOrStdout(), "Permissions updated successfully")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Permissions updated successfully")
 			return nil
 		},
 	}

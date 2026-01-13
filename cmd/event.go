@@ -116,7 +116,7 @@ func newEventCreateCmd(client *api.Client) *cobra.Command {
 				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Event %q created successfully\n", name)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Event %q created successfully\n", name)
 			return nil
 		},
 	}
@@ -154,7 +154,7 @@ func newEventUpdateCmd(client *api.Client) *cobra.Command {
 				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Event %s updated successfully\n", id)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Event %s updated successfully\n", id)
 			return nil
 		},
 	}

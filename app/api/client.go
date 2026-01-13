@@ -79,7 +79,7 @@ func (c *Client) execute(ctx context.Context, method, path string, queryParams u
 	if err != nil {
 		return nil, fmt.Errorf("http request failed: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	responseBody, err := readResponseBody(response)
 	if err != nil {

@@ -18,7 +18,30 @@ go build -o ensync ./main.go
 ```
 
 ### 2. Download Binary (No Go required)
-Download the pre-compiled binary for your OS/Arch from the [Releases](https://github.com/EnSync-engine/CLI/releases) page.
+
+**macOS & Linux**
+1. Download the `tar.gz` archive for your OS/Arch from the [Releases](https://github.com/EnSync-engine/CLI/releases) page.
+2. Extract and install:
+   ```bash
+   tar -xzf CLI_*.tar.gz
+   chmod +x ensync
+   sudo mv ensync /usr/local/bin/
+   ```
+3. Verify: `ensync version`
+
+**Windows**
+1. Download the `.zip` archive for your OS/Arch from the [Releases](https://github.com/EnSync-engine/CLI/releases) page.
+2. Extract the zip file.
+3. Open PowerShell as Administrator and move the binary (optional but recommended):
+   ```powershell
+   mkdir C:\ensync
+   move ensync.exe C:\ensync\
+   # Add to PATH (current session)
+   $env:Path += ";C:\ensync"
+   # Add to PATH (permanent)
+   [Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\ensync", [EnvironmentVariableTarget]::User)
+   ```
+4. Verify: `ensync version`
 
 ### 3. Using Go Install
 ```bash

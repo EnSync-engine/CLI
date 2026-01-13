@@ -59,10 +59,19 @@ debug: false
 ```
 
 ### Environment Variables
+
+**macOS & Linux**
 ```bash
 export ENSYNC_ACCESS_KEY="your-access-key"
 export ENSYNC_BASE_URL="https://access.gms.ensync.cloud/api/v1/ensync"
 export ENSYNC_DEBUG=false
+```
+
+**Windows (PowerShell)**
+```powershell
+$env:ENSYNC_ACCESS_KEY="your-access-key"
+$env:ENSYNC_BASE_URL="https://access.gms.ensync.cloud/api/v1/ensync"
+$env:ENSYNC_DEBUG="false"
 ```
 
 ## Usage

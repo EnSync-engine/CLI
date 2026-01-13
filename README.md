@@ -52,7 +52,11 @@ go install github.com/EnSync-engine/cli@latest
 
 The CLI can be configured using a config file or environment variables.
 
-### Configuration File (`~/.ensync/config.yaml`)
+### Configuration File
+Create a config file at:
+*   **macOS / Linux**: `~/.ensync/config.yaml`
+*   **Windows**: `%UserProfile%\.ensync\config.yaml`
+
 ```yaml
 base_url: "https://access.gms.ensync.cloud/api/v1/ensync"
 debug: false
